@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/time.h>
 
 #include "fb_video.h"
 
@@ -15,6 +16,29 @@
                                 } \
                                 printf(#message" exec.\n"); \
                             } while (0);
+
+static inline void calculate_fps();
+
+static inline void calculate_fps() {
+    static int num = 0;
+    static struct timeval t1 = {0};
+    static struct timeval t2 = {0};
+    num++;
+    if ((t1.tv_sec - t2.tv_sec) > 5) {
+        float interval = (t1.tv_sec - t2.tv_sec) + (t1.tv_usec - t2.tv_usec)/1000000;
+        float fps = num / (interval);
+        printf("fps = %lf\n", fps);
+        gettimeofday(&t1, NULL);
+        gettimeofday(&t2, NULL);
+        num = 0;
+        return;
+    }
+    gettimeofday(&t1, NULL);
+    if (t1.tv_sec == 0) {
+        gettimeofday(&t2, NULL);
+    }
+    return;
+}
 
 int main(void)
 {
@@ -46,8 +70,10 @@ int main(void)
         if (len > 0) {
             if(len == 65504)
                 fb_display_pic((void *)buf, fb_start, 320, 180, 0, 0, 0, 65504);
-            else
+            else {
                 fb_display_pic((void *)buf, fb_start, 320, 180, 0, 0, 65504, 49696);
+                calculate_fps();
+            }
         } else {
             break;
         }
