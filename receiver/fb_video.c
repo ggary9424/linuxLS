@@ -91,6 +91,8 @@ char* fb_init(int fbfd)
 void fb_display_pic(void *pic, char *fb_start, int width, int height,
                     int x_offset, int y_offset, int start_byte, int pic_len)
 {
+    if (!pic_len)
+        return;
     unsigned char* in = (unsigned char*)pic;
     int y0,y1,u,v;
     RGB rgb;

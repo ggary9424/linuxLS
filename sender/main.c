@@ -17,11 +17,23 @@
                                 printf(#message" exec.\n"); \
                             } while (0);
 
+#define SET_HEADER(header, t, w, h) do { \
+                                header.time = t; \
+                                header.width = w; \
+                                header.height = h; \
+                            } while(0);
+
 typedef struct RGB {
     int r;
     int g;
     int b;
 } RGB;
+
+typedef struct HEADER {
+    struct timeval time;
+    int width;
+    int height;
+} Header;
 
 static inline int clip(int value, int min, int max)
 {
@@ -77,15 +89,16 @@ static void YUYV_to_RGB_file(const void * p, const int width, const int height, 
 
 int main(void)
 {
-    int fd = 0, req_buffer_num = 4, width = 100, height = 100;
+    int fd = 0, req_buffer_num = 4, width = 720, height = 600;
     char *video = "/dev/video0";
     my_buffer *bufs = NULL;
     char *pic = NULL;
     int socketfd = -1;
-    struct sockaddr_in myaddr, toaddr;
-    int sendlen = 0, len = 0, pic_size;
+    struct sockaddr_in toaddr;
+    int len = 0, pic_size;
     /* TODO: use it to make reliable header */
     struct timeval timenow;
+    Header header;
 
     EXEC_CMD_AND_CHECK(fd = v4l2_open_dev(video), -1, v4l2_open_dev);
     EXEC_CMD_AND_CHECK(v4l2_init_dev(fd, &req_buffer_num, &bufs, &width, &height), -1, v4l2_init_dev);
@@ -93,7 +106,7 @@ int main(void)
     EXEC_CMD_AND_CHECK(pic = v4l2_getpic(fd, bufs), NULL, v4l2_getpic);
     //YUYV_to_RGB_file(pic, width, height, "pic.ppm");
 
-    socketfd = socket(AF_INET,SOCK_DGRAM, 0);
+    socketfd = socket(AF_INET, SOCK_STREAM, 0);
     if (socketfd == -1) {
         perror("socket create error!\n");
         exit(EXIT_FAILURE);
@@ -101,32 +114,23 @@ int main(void)
     toaddr.sin_family = AF_INET;
     toaddr.sin_port = htons(8080);
     toaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons(8000);
-    myaddr.sin_addr.s_addr = htons(INADDR_ANY);
-    if (bind(socketfd, (struct sockaddr*)&myaddr, sizeof(myaddr)) == -1) {
-        perror("bind");
+    if ((connect(socketfd, (struct sockaddr*)&toaddr, sizeof(toaddr))) == -1) {
+        perror("connect");
         exit(EXIT_FAILURE);
     }
     while (1) {
         EXEC_CMD_AND_CHECK(pic = (char *)v4l2_getpic(fd, bufs), NULL, v4l2_getpic);
         pic_size = width*height*2;
-        while (pic_size > 0) {
-            gettimeofday(&timenow, NULL);
-            // UDP max length is 65507
-            // we need multiple of 4 byte one sendto
-            // so 65504 is a good choice
-            if (pic_size > 65504)
-                sendlen = 65504;
-            else
-                sendlen = pic_size;
-            len = sendto(socketfd, pic, sendlen, 0, (struct sockaddr*)&toaddr, sizeof(toaddr));
-            if (len == -1) {
-                perror("sendto");
-                exit(EXIT_FAILURE);
-            }
-            pic_size -= sendlen;
-            pic += sendlen;
+        gettimeofday(&timenow, NULL);
+        SET_HEADER(header, timenow, width, height);
+        // UDP max length is 65507
+        if ((len = send(socketfd, &header, sizeof(header), 0)) == -1) {
+            perror("sendto");
+            exit(EXIT_FAILURE);
+        }
+        if ((len = send(socketfd, pic, pic_size, 0)) == -1) {
+            perror("sendto");
+            exit(EXIT_FAILURE);
         }
     }
 
