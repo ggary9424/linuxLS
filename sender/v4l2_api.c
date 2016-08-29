@@ -190,42 +190,23 @@ int v4l2_start_capstream(int fd, int req_buffer_num)
 void *v4l2_getpic(int fd, my_buffer *bufs)
 {
     struct v4l2_buffer v4l2_buf;
-    fd_set fds;
-    int r = 0;
-    struct timeval tv = {
-        .tv_sec = 2,
-        .tv_usec = 0
-    };
 
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
     CLEAR (v4l2_buf);
     v4l2_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     v4l2_buf.memory = V4L2_MEMORY_MMAP;
     while (1) {
-        /* poll method */
-        r = select (fd+1, &fds, NULL, NULL, &tv);
-        if (r == -1) {
-            if (EINTR == errno)
-                continue;
-            perror("select");
-        } else if (r == 0) {
-            fprintf(stdout, "select timeout\n");
-        } else {
-            /* VIDIOC_DQBUF */
-            if (xioctl (fd, VIDIOC_DQBUF, &v4l2_buf) == -1) {
-                switch (errno) {
-                    case EAGAIN:
-                        printf("EAGAIN\n");
-                        continue;
-                    case EIO:
-                    default:
-                        perror("VIDIOC_DQBUF");
-                        return NULL;
-                }
+        /* VIDIOC_DQBUF */
+        if (xioctl (fd, VIDIOC_DQBUF, &v4l2_buf) == -1) {
+            switch (errno) {
+                case EAGAIN:
+                    continue;
+                case EIO:
+                default:
+                    perror("VIDIOC_DQBUF");
+                    return NULL;
             }
-            break;
         }
+        break;
     }
     /* VIDIOC_QBUF */
     if (-1 == xioctl (fd, VIDIOC_QBUF, &v4l2_buf)) {
